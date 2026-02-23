@@ -944,9 +944,18 @@ final class MessageSchema<T> implements Schema<T> {
       case 66: // ONEOF_SINT32:
       case 67: // ONEOF_SINT64:
       case 68: // ONEOF_GROUP:
-        return isOneofCaseEqual(message, other, pos)
-            && SchemaUtil.safeEquals(
-                UnsafeUtil.getObject(message, offset), UnsafeUtil.getObject(other, offset));
+        if (!isOneofCaseEqual(message, other, pos)) {
+          return false;
+        }
+        // Skip non-active variants. All oneof variants share the same storage slot, so we
+        // only need to compare the value for the active variant. Without this check, each
+        // variant triggers a redundant safeEquals on the shared slot, causing O(V^N) behavior
+        // for nested messages (where V = number of variants, N = nesting depth).
+        if (!isOneofPresent(message, numberAt(pos), pos)) {
+          return true;
+        }
+        return SchemaUtil.safeEquals(
+            UnsafeUtil.getObject(message, offset), UnsafeUtil.getObject(other, offset));
       default:
         // Assume it's an empty entry - just go to the next entry.
         return true;
